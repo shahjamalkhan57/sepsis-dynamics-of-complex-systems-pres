@@ -1,0 +1,922 @@
+<title>Sepsis: An Interactive Simulation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&display=swap">
+<style>
+  :root{
+    --bg:#ffffff;
+    --line:#e8dcd8;
+    --line-strong:#d8c8c2;
+    --text:#2a2024;
+    --muted:#7a6a6e;
+    --amber:#d98200;
+    --amber-deep:#b06a00;
+    --good:#1a9e68;
+    --crit:#d93025;
+    --sans:'Nunito','Trebuchet MS',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans)}
+  .grid{height:100vh}
+
+  /* ---------- stage ---------- */
+  .stage-col{position:relative;overflow:hidden;background:#f8ece9;display:flex;flex-direction:column;height:100%}
+  #stage{flex:1;width:100%;display:block;min-height:0}
+  .hud{position:absolute;z-index:3}
+  .s-title{top:14px;left:16px;pointer-events:none;max-width:320px}
+  .s-title .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--amber-deep);margin:0 0 4px}
+  .s-title h1{font-size:20px;line-height:1.2;margin:0;font-weight:800;color:#3a2a30}
+  .caption{top:14px;left:50%;transform:translateX(-50%);width:min(560px,58%);text-align:center;pointer-events:none}
+  #phaseEyebrow{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.14em;padding:5px 14px;border-radius:99px;background:#7c4fb8;color:#fff}
+  #banner{display:none;margin:9px auto 0;padding:8px 16px;font-size:13.5px;font-weight:700;border:1.5px solid;border-radius:10px;background:rgba(255,255,255,.95);max-width:470px}
+  #banner.good{color:#0e7a4e;border-color:#7ed0ac}
+  #banner.warn{color:#9a5e00;border-color:#e8b86a}
+  #banner.bad{color:#b02a20;border-color:#eda39c}
+
+  .tip{position:absolute;max-width:270px;background:#fff;border:1.5px solid var(--line-strong);border-left:4px solid var(--amber);border-radius:10px;padding:10px 13px;font-size:14px;line-height:1.45;display:none;pointer-events:none;z-index:6;box-shadow:0 8px 28px rgba(80,40,30,.18)}
+  .tip b{display:block;font-size:14.5px;margin-bottom:2px;color:#3a2a30}
+  .tip span{color:var(--muted)}
+
+  .hint{position:absolute;right:16px;top:14px;z-index:3;font-size:12px;font-weight:700;letter-spacing:.02em;color:#a08a84;pointer-events:none;background:rgba(255,255,255,.75);padding:4px 10px;border-radius:99px}
+
+  /* ---------- story bubble ---------- */
+  .bubble{position:absolute;z-index:5;width:max-content;max-width:330px;background:#fff;border:1.5px solid var(--line-strong);border-radius:13px;padding:11px 14px;font-size:15px;font-weight:600;line-height:1.45;color:#4a383e;box-shadow:0 10px 30px rgba(80,40,30,.17);opacity:0;transition:opacity .35s;pointer-events:none}
+  .bubble.show{opacity:1}
+  .bubble .tail{position:absolute;width:13px;height:13px;background:#fff;transform:rotate(45deg);display:none}
+  .bubble.above .tail{display:block;bottom:-8px;border-right:1.5px solid var(--line-strong);border-bottom:1.5px solid var(--line-strong)}
+  .bubble.below .tail{display:block;top:-8px;border-left:1.5px solid var(--line-strong);border-top:1.5px solid var(--line-strong)}
+
+  /* ---------- control deck ---------- */
+  .deck{position:relative;z-index:4;background:#fff;border-top:1.5px solid var(--line);padding:10px 14px 12px;display:flex;flex-direction:column;gap:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
+  .lg-title{font-size:10.5px;font-weight:800;letter-spacing:.14em;color:#a08a8e;text-transform:uppercase;margin-right:2px}
+  .lg-item{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#5a4a4e;white-space:nowrap}
+  .lg-dot{width:11px;height:11px;border-radius:50%;flex:none}
+  .lg-dot.pill{width:14px;height:8px;border-radius:5px}
+  .lg-dot.ring{background:#f7f0dc;border:2px solid #b8a476}
+  .foot-note{font-size:11px;font-weight:600;color:#a08a8e;line-height:1.4;margin:0}
+  .controls{display:flex;align-items:center;gap:9px}
+  button{font-family:var(--sans);cursor:pointer;border-radius:10px;transition:border-color .15s,background .15s,transform .05s}
+  button:active{transform:translateY(1px)}
+  .btn{background:#fff;border:1.5px solid var(--line-strong);color:#3a2a30;font-size:14px;font-weight:800;padding:9px 15px;white-space:nowrap}
+  .btn:hover{border-color:var(--amber)}
+  .btn:focus-visible{outline:2.5px solid var(--amber);outline-offset:2px}
+  .btn[disabled]{opacity:.45;cursor:default}
+  .btn.treat{background:#148a5c;border-color:#148a5c;color:#fff}
+  .btn.treat:hover{background:#0e7a4e}
+  .btn.treat[disabled]{background:#148a5c;opacity:.55}
+  .scrub-wrap{flex:1;display:flex;flex-direction:column;gap:3px;min-width:140px}
+  .phases{position:relative;display:flex;height:20px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}
+  .ph{flex:none;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:800;letter-spacing:.02em;color:#fff;opacity:.38;border:none;border-radius:0;padding:0 2px;cursor:pointer;overflow:hidden;white-space:nowrap}
+  .ph.on{opacity:1}
+  .ph:hover{opacity:.8}
+  #treatMark{position:absolute;top:-2px;bottom:-2px;width:3px;background:#148a5c;border-radius:2px;display:none;pointer-events:none;box-shadow:0 0 0 1.5px #fff}
+  #scrub{width:100%;accent-color:var(--amber);cursor:pointer;margin:0;height:22px}
+  #hourLbl{font-size:14px;font-weight:800;color:var(--amber-deep);min-width:96px;text-align:right;font-variant-numeric:tabular-nums}
+
+  /* ---------- intro overlay ---------- */
+  .intro{position:fixed;inset:0;z-index:20;background:rgba(250,246,244,.92);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
+  .intro-card{max-width:600px;width:100%;background:#fff;border:1.5px solid var(--line-strong);border-radius:18px;padding:34px 38px;box-shadow:0 18px 60px rgba(80,40,30,.16)}
+  .i-eyebrow{font-size:11.5px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:var(--amber-deep);margin:0 0 10px}
+  .intro-card h2{font-size:clamp(24px,3.2vw,32px);margin:0 0 10px;line-height:1.15;font-weight:800;color:#3a2a30;text-wrap:balance}
+  .i-lede{color:#6a585e;font-size:16.5px;line-height:1.55;margin:0 0 14px;font-weight:600}
+  .i-note{color:#8a7478;font-size:14px;line-height:1.55;margin:0 0 22px;font-weight:600}
+  .begin{width:100%;background:var(--amber);border:none;color:#fff;font-size:16px;font-weight:800;padding:14px;letter-spacing:.04em;border-radius:12px}
+  .begin:hover{background:#c27400}
+
+  /* ---------- responsive (kept last so overrides win) ---------- */
+  @media(max-width:1500px){
+    .caption{top:58px}
+  }
+  @media(max-width:860px){
+    .s-title{max-width:200px}
+    .s-title h1{font-size:15px}
+    .hint{display:none}
+    .caption{top:66px}
+    .legend{display:none}
+    #hourLbl{min-width:84px;font-size:12.5px}
+    .bubble{max-width:260px;font-size:13.5px}
+  }
+</style>
+
+<div class="grid">
+  <div class="stage-col">
+    <canvas id="stage"></canvas>
+    <div class="hud s-title">
+      <p class="eyebrow">A simplified model of one blood vessel</p>
+      <h1>Understanding sepsis</h1>
+    </div>
+    <div class="hud caption">
+      <span id="phaseEyebrow">HOUR 0 &middot; INFECTION</span>
+      <div id="banner"></div>
+    </div>
+    <div class="hint">Hover to identify items. Pause to look more closely.</div>
+    <div class="tip" id="tip"></div>
+    <div class="bubble" id="bubble"><span id="bubbleText"></span><span class="tail" id="bubbleTail"></span></div>
+
+    <div class="deck">
+      <div class="legend">
+        <span class="lg-title">Inside the blood vessel:</span>
+        <span class="lg-item"><span class="lg-dot" style="background:#d4574a"></span>Red blood cell</span>
+        <span class="lg-item"><span class="lg-dot ring"></span>Neutrophil</span>
+        <span class="lg-item"><span class="lg-dot" style="background:#cdb57e"></span>Macrophage</span>
+        <span class="lg-item"><span class="lg-dot pill" style="background:#7c4fb8"></span>Bacteria</span>
+        <span class="lg-item"><span class="lg-dot" style="background:#a97fd6"></span>Endotoxin</span>
+        <span class="lg-item"><span class="lg-dot" style="background:#e8920f"></span>Cytokine</span>
+        <span class="lg-item"><span class="lg-dot" style="background:#3a93b8"></span>IL-10</span>
+        <span class="lg-item"><span class="lg-dot" style="background:#c9995c"></span>Platelet</span>
+        <span class="lg-item"><span class="lg-dot" style="background:#8e2f35"></span>Blood clot</span>
+        <span class="lg-item"><span class="lg-dot" style="background:#6a8aa0"></span>NET</span>
+      </div>
+      <div class="controls">
+        <button class="btn" id="btnPlay">&#9654; Play</button>
+        <button class="btn" id="btnSpeed">1&times;</button>
+        <div class="scrub-wrap">
+          <div class="phases" id="phases"><div id="treatMark"></div></div>
+          <input type="range" id="scrub" min="0" max="48" step="0.1" value="0" aria-label="Timeline, hours" title="Drag to move through the 48 hours">
+        </div>
+        <span id="hourLbl">HOUR 0.0/48</span>
+        <button class="btn treat" id="btnTreat" title="Antibiotics are shown; real treatment may involve additional care.">+ START TREATMENT</button>
+        <button class="btn" id="btnReset" title="Restart">&#8635;</button>
+      </div>
+      <p class="foot-note">Illustrative sequence and outcomes. Timing varies in real patients. Antibiotics are shown; real treatment may involve additional care.</p>
+    </div>
+  </div>
+</div>
+
+<div class="intro" id="intro">
+  <div class="intro-card">
+    <p class="i-eyebrow">Interactive simulation</p>
+    <h2>Understanding sepsis</h2>
+    <p class="i-lede">Sepsis is a life-threatening condition in which the body&rsquo;s response to an infection causes organ dysfunction. This simulation shows one possible sequence of changes inside a blood vessel over an illustrative 48-hour period.</p>
+    <p class="i-note">Watch how immune cells, the vessel lining and blood flow change. Pause or hover to explore. Select Start treatment to compare earlier and later intervention. The timing and outcomes are examples, not medical predictions.</p>
+    <button class="begin" id="btnStart">Start simulation</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ========================= utils ========================= */
+const rand=(a,b)=>a+Math.random()*(b-a);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const TAU=Math.PI*2;
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const stage=document.getElementById('stage'), ctx=stage.getContext('2d');
+let W=0,H=0,DPR=1;
+function sizeCanvas(c,cx){
+  const r=c.getBoundingClientRect();
+  c.width=r.width*DPR; c.height=r.height*DPR;
+  cx.setTransform(DPR,0,0,DPR,0,0);
+  return [r.width,r.height];
+}
+let inited=false;
+function resize(){
+  const oldW=W,oldH=H;
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  [W,H]=sizeCanvas(stage,ctx);
+  if(!inited||W===oldW&&H===oldH)return;
+  if(oldW<60||oldH<60){ rebuildTo(S); return; }
+  const fx=W/oldW,fy=H/oldH;
+  for(const pool of [rbcs,plats,bacts,neuts,macs,cyts,il10s,endos,leaks,abxP])
+    for(const p of pool){p.x*=fx;p.y*=fy;}
+  for(const w2 of webs){w2.x*=fx;w2.y*=fy;for(const s2 of w2.segs){s2.x1*=fx;s2.x2*=fx;s2.y1*=fy;s2.y2*=fy;}}
+  for(const c of clots){c.x*=fx;c.y*=fy;}
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+/* ========================= model ========================= */
+function computeState(T,Tt){
+  const dt=0.2;
+  let B=0.04,E=0,M=0.04,C=0,A=0,Dm=0,Coag=0,VolLoss=0;
+  for(let t=0;t<T;t+=dt){
+    const treated=Tt!=null&&t>=Tt;
+    const abx=treated?clamp((t-Tt)/1.5,0,1)*1.6:0;
+    const killFlux=1.1*M*B+abx*B;
+    const brake=1/(1+2.6*A);
+    const dB=0.42*B*(1-B)-killFlux;
+    const dE=0.75*(1.1*M*B)+0.3*(abx*B)+0.18*B-0.55*E;
+    const dM=(0.55*(C*0.7+E)+0.25*B)*(1-M)-0.07*M;
+    const dC=(0.95*M*(0.5*B+E)+0.85*Dm*M+0.12*Dm)*brake-(treated?0.17:0.045)*C;
+    const dA=0.14*C-0.08*A;
+    const dDm=0.075*Math.max(0,C-0.26)+0.05*Math.max(0,Coag-0.3)-0.025*Dm*Math.max(0,0.25-C)*4;
+    const dCo=0.42*Math.max(0,Dm-0.12)+0.1*Math.max(0,C-0.45)-0.09*Coag;
+    const dV=0.05*Math.max(0,C-0.3)-(treated?0.09:0.01)*VolLoss;
+    B=clamp(B+dB*dt,0,1); E=clamp(E+dE*dt,0,1); M=clamp(M+dM*dt,0,1);
+    C=clamp(C+dC*dt,0,1); A=clamp(A+dA*dt,0,1); Dm=clamp(Dm+dDm*dt,0,1);
+    Coag=clamp(Coag+dCo*dt,0,1); VolLoss=clamp(VolLoss+dV*dt,0,1);
+  }
+  const treated=Tt!=null&&T>=Tt;
+  const O2=clamp(1-0.45*Coag-0.3*VolLoss-0.25*C*0.5,0.05,1);
+  const sys=clamp(120-46*C-30*VolLoss-12*Dm+(treated?12*(1-Math.exp(-(T-Tt)/2)):0),40,125);
+  const hr=clamp(72+62*C+25*VolLoss+15*(1-O2)-(treated?8:0),60,168);
+  return {B,E,M,C,A,Dm,Coag,VolLoss,O2,sys,hr,treated,tSince:treated?T-Tt:0};
+}
+
+/* ========================= sim time ========================= */
+let simT=0,Tt=null,playing=false,fatal=false;
+let speedIdx=1; const SPEEDS=[[0.5,'½×'],[1,'1×'],[3,'3×']];
+const HPS=0.5;
+let animT=0,last=performance.now();
+let S=computeState(0,null);
+
+/* ========================= phases ========================= */
+const PHASES=[
+  {t0:0, t1:5, name:'INFECTION',           c:'#7c4fb8'},
+  {t0:5, t1:9, name:'IMMUNE RESPONSE',     c:'#d98200'},
+  {t0:9, t1:16,name:'VESSEL INFLAMMATION', c:'#e05d2d'},
+  {t0:16,t1:26,name:'CIRCULATION PROBLEMS',c:'#c2342e'},
+  {t0:26,t1:48,name:'CRITICAL ILLNESS',    c:'#8e2430'},
+];
+const phaseFor=t=>PHASES.find(p=>t<p.t1)||PHASES[PHASES.length-1];
+
+/* ========================= vessel geometry ========================= */
+function geom(){
+  const cy=H*0.5;
+  const half=H*lerp(0.24,0.33,clamp(S.C*1.2,0,1));
+  return {cy,top:cy-half,bot:cy+half,half};
+}
+const WOUND_FX=0.26;
+
+/* ========================= entities ========================= */
+const rbcs=[],plats=[],bacts=[],neuts=[],macs=[],cyts=[],il10s=[],endos=[],leaks=[],webs=[],clots=[],flashes=[],abxP=[];
+let lastKill=null;
+
+function occluders(){
+  const out=[];
+  for(const w of webs) if(w.plats>=3) out.push({x:w.x,y:w.y,R:w.R+10,p:0.75});
+  for(const c of clots) out.push({x:c.x,y:c.y,R:c.R+12,p:0.85});
+  return out;
+}
+function flowAt(x,y,occ){
+  let m=1;
+  for(const o of occ){
+    const d2=(x-o.x)**2+(y-o.y)**2;
+    if(d2<o.R*o.R) m=Math.min(m,1-o.p);
+    else if(x>o.x&&x<o.x+90&&Math.abs(y-o.y)<o.R) m=Math.min(m,1-o.p*0.6);
+    else if(x<o.x&&x>o.x-60&&Math.abs(y-o.y)<o.R) m=Math.min(m,0.45);
+  }
+  return m;
+}
+function pulse(){
+  const amp=reduced?0.06:0.3*(S.sys/120);
+  return 1+amp*Math.max(0,Math.sin(animT*S.hr/60*TAU))**3;
+}
+
+function spawnRBC(x){const g=geom();rbcs.push({k:'rbc',x:x??rand(0,W),y:rand(g.top+14,g.bot-14),r:rand(6.5,9),rot:rand(0,TAU),vr:rand(-0.7,0.7),wob:rand(0,TAU),sp:rand(0.85,1.2)});}
+function spawnPlat(x){const g=geom();plats.push({k:'plat',x:x??rand(0,W),y:rand(g.top+10,g.bot-10),r:rand(2.6,3.4),rot:rand(0,TAU),sp:rand(0.9,1.25),act:false,stuck:null});}
+function spawnBact(x,y){bacts.push({k:'bact',x,y,r:6,a:rand(0,TAU),turn:0,al:0,sp:rand(0.3,0.5),stuck:null});}
+function spawnNeut(x){const g=geom();neuts.push({k:'neut',x:x??-20,y:rand(g.top+22,g.bot-22),r:rand(13,15.5),wob:rand(0,TAU),sp:rand(0.5,0.72),vx:0,vy:0,state:'flow',netT:0,emit:rand(0.4,1.2)});}
+function spawnMac(x){const g=geom();macs.push({k:'mac',x:x??-30,y:rand(g.top+30,g.bot-30),r:rand(18,21),wob:rand(0,TAU),sp:rand(0.3,0.45),emit:rand(0.2,0.8)});}
+function spawnCyt(x,y,burst){cyts.push({k:'cyt',x,y,r:rand(1.5,2.8),vx:rand(-12,26)*(burst?2:1),vy:rand(-22,22)*(burst?1.6:1),life:rand(2,4),age:0});}
+function spawnIl10(x,y){il10s.push({k:'il10',x,y,r:rand(1.6,2.6),vx:rand(-10,22),vy:rand(-16,16),life:rand(2,3.6),age:0});}
+function spawnEndo(x,y){endos.push({k:'endo',x,y,r:rand(1.2,2.2),vx:rand(-8,30),vy:rand(-18,18),life:rand(1.8,3.2),age:0});}
+function spawnLeakP(){const g=geom();const top=Math.random()<0.5;const x=rand(0,W);leaks.push({k:'leak',x,y:top?g.top:g.bot,r:rand(1.6,3),vx:rand(-5,9),vy:(top?-1:1)*rand(14,30),life:rand(1.4,2.4),age:0});}
+function spawnWeb(x,y){
+  const segs=[];const n=10+Math.floor(rand(0,5));
+  for(let i=0;i<n;i++){
+    const a=rand(0,TAU),l=rand(14,34);
+    const x1=x+rand(-8,8),y1=y+rand(-8,8);
+    segs.push({x1,y1,x2:x1+Math.cos(a)*l,y2:y1+Math.sin(a)*l});
+  }
+  webs.push({k:'net',x,y,R:30,segs,plats:0,age:0,fib:0});
+}
+function spawnClot(){
+  const g=geom();
+  const onTop=Math.random()<0.5;
+  const x=rand(W*0.15,W*0.9),y=onTop?g.top+rand(8,26):g.bot-rand(8,26);
+  const blobs=[];const n=7+Math.floor(rand(0,5));
+  for(let i=0;i<n;i++)blobs.push({dx:rand(-13,13),dy:rand(-10,10),r:rand(3.5,7.5)});
+  clots.push({k:'clot',x,y,R:20,blobs,grow:0});
+}
+
+function seed(){
+  rbcs.length=plats.length=bacts.length=neuts.length=macs.length=0;
+  cyts.length=il10s.length=endos.length=leaks.length=webs.length=clots.length=flashes.length=abxP.length=0;
+  lastKill=null;
+  for(let i=0;i<64;i++)spawnRBC();
+  for(let i=0;i<22;i++)spawnPlat();
+  for(let i=0;i<3;i++)spawnNeut(rand(0,W));
+  spawnMac(rand(0,W));
+}
+function rebuildTo(state){
+  seed();
+  const g=geom();
+  for(let i=0;i<Math.round(state.B*40);i++)spawnBact(rand(W*0.1,W*0.9),rand(g.top+12,g.bot-12));
+  const wn=Math.round(3+state.M*13);
+  for(let i=0;i<wn;i++)spawnNeut(rand(0,W));
+  for(let i=0;i<Math.round(1+state.M*4);i++)spawnMac(rand(0,W));
+  for(let i=0;i<Math.round(state.Coag*4);i++)spawnClot();
+  if(state.C>0.45)for(let i=0;i<Math.round(state.C*3);i++)spawnWeb(rand(W*0.2,W*0.8),rand(g.top+30,g.bot-30));
+}
+
+/* ========================= update ========================= */
+function update(dt){
+  const g=geom();
+  const occ=occluders();
+  const base=52*lerp(0.3,1,S.O2*0.5+S.sys/240)*pulse();
+
+  const bactT=Math.round(S.B*40);
+  const neutT=Math.round(3+S.M*13);
+  const macT=Math.round(1+S.M*4);
+  while(neuts.length<neutT)spawnNeut();
+  if(neuts.length>neutT+2)neuts.splice(0,1);
+  while(macs.length<macT)spawnMac();
+  if(macs.length>macT+1)macs.pop();
+  const clotT=Math.round(S.Coag*5);
+  if(clots.length<clotT&&Math.random()<dt*1.2)spawnClot();
+  if(clots.length>clotT+1)clots.shift();
+
+  const wx=W*WOUND_FX;
+  if(bacts.length<bactT&&Math.random()<dt*3){
+    Math.random()<0.55?spawnBact(wx+rand(-12,12),g.bot-8):spawnBact(rand(W*0.1,W*0.9),rand(g.top+12,g.bot-12));
+  }
+  while(bacts.length>bactT+4){const b=bacts.shift();if(b&&Math.random()<0.8){for(let i=0;i<2;i++)spawnEndo(b.x,b.y);}}
+
+  for(const p of rbcs){
+    const f=flowAt(p.x,p.y,occ);
+    p.x+=base*p.sp*f*dt;
+    p.wob+=dt;p.rot+=p.vr*dt*f;
+    p.y=clamp(p.y+Math.sin(p.wob*1.3)*6*dt,g.top+10,g.bot-10);
+    if(p.x>W+20){p.x=-20;p.y=rand(g.top+12,g.bot-12);}
+  }
+  for(const p of plats){
+    if(p.stuck)continue;
+    p.act=S.Dm>0.12&&Math.random()<0.5?true:p.act;
+    for(const w2 of webs){
+      if((p.x-w2.x)**2+(p.y-w2.y)**2<(w2.R*0.9)**2){p.stuck=w2;w2.plats++;w2.fib=Math.min(1,w2.fib+0.12);p.x=w2.x+rand(-w2.R,w2.R)*0.55;p.y=w2.y+rand(-w2.R,w2.R)*0.5;break;}
+    }
+    if(p.stuck)continue;
+    for(const c of clots){
+      if((p.x-c.x)**2+(p.y-c.y)**2<(c.R*0.9)**2){p.stuck=c;c.grow=Math.min(1,c.grow+0.07);p.x=c.x+rand(-c.R,c.R)*0.5;p.y=c.y+rand(-c.R,c.R)*0.45;break;}
+    }
+    if(p.stuck)continue;
+    const f=flowAt(p.x,p.y,occ);
+    p.x+=base*p.sp*f*dt;p.rot+=2*dt;
+    p.y=clamp(p.y+Math.sin(animT*2+p.rot)*7*dt,g.top+7,g.bot-7);
+    if(p.x>W+10){p.x=-10;p.y=rand(g.top+8,g.bot-8);p.act=false;p.stuck=null;}
+  }
+  if(plats.filter(p=>!p.stuck).length<22)spawnPlat(-8);
+
+  for(const b of bacts){
+    b.al=Math.min(1,b.al+dt*2);
+    if(b.stuck)continue;
+    b.turn+=rand(-5,5)*dt;b.a+=b.turn*dt;
+    const f=flowAt(b.x,b.y,occ);
+    b.x+=Math.cos(b.a)*24*dt+base*0.4*b.sp*f*dt;
+    b.y+=Math.sin(b.a)*24*dt;
+    b.y=clamp(b.y,g.top+8,g.bot-8);
+    if(b.x>W+14)b.x=-14;if(b.x<-20)b.x=W+12;
+    for(const w2 of webs){
+      for(const s2 of w2.segs){
+        const mx=(s2.x1+s2.x2)/2,my=(s2.y1+s2.y2)/2;
+        if((b.x-mx)**2+(b.y-my)**2<120){b.stuck=w2;break;}
+      }
+      if(b.stuck)break;
+    }
+  }
+
+  for(const n of neuts){
+    n.wob+=dt;
+    if(n.state==='net'){
+      n.netT+=dt;
+      if(n.netT>0.6){spawnWeb(n.x,n.y);n.state='dead';}
+      continue;
+    }
+    if(n.state==='dead')continue;
+    if(S.C>0.42&&webs.length<6&&Math.random()<dt*0.04*S.C*(reduced?0.5:1)){n.state='net';n.netT=0;continue;}
+    if(n.state==='flow'&&S.C>0.12&&Math.random()<dt*0.3){n.state='roll';n.y=Math.random()<0.5?g.top+n.r*0.75:g.bot-n.r*0.75;}
+    let tx=base*n.sp,ty=Math.sin(n.wob)*8;
+    if(n.state==='roll'){tx=base*0.22;ty=0;}
+    let prey=null,pd=1e9;
+    for(const b of bacts){if(b.stuck&&Math.random()<0.7)continue;const d2=(b.x-n.x)**2+(b.y-n.y)**2;if(d2<pd){pd=d2;prey=b;}}
+    if(prey&&pd<300*300){
+      const d=Math.sqrt(pd)||1;
+      tx=(prey.x-n.x)/d*100;ty=(prey.y-n.y)/d*100;
+      if(d<n.r+3){
+        bacts.splice(bacts.indexOf(prey),1);
+        flashes.push({x:n.x,y:n.y,age:0});
+        lastKill={x:n.x,y:n.y,r:16};
+        for(let i2=0;i2<3;i2++)spawnEndo(n.x,n.y);
+        if(S.C>0.06)for(let i2=0;i2<4;i2++)spawnCyt(n.x,n.y,true);
+      }
+    }
+    n.vx=lerp(n.vx,tx,dt*3);n.vy=lerp(n.vy,ty,dt*3);
+    const f=flowAt(n.x,n.y,occ);
+    n.x+=n.vx*f*dt;n.y+=n.vy*dt;
+    n.y=clamp(n.y,g.top+n.r*0.7,g.bot-n.r*0.7);
+    if(n.x>W+26){n.x=-22;n.y=rand(g.top+20,g.bot-20);n.state='flow';}
+    n.emit-=dt*(0.5+3.5*S.C);
+    if(n.emit<=0&&S.C>0.04){spawnCyt(n.x,n.y,false);n.emit=rand(0.5,1.3);}
+  }
+  for(let i=neuts.length-1;i>=0;i--)if(neuts[i].state==='dead')neuts.splice(i,1);
+
+  for(const m of macs){
+    m.wob+=dt;
+    const f=flowAt(m.x,m.y,occ);
+    m.x+=base*m.sp*f*dt;
+    m.y=clamp(m.y+Math.sin(m.wob*0.7)*5*dt,g.top+m.r,g.bot-m.r);
+    if(m.x>W+34){m.x=-30;m.y=rand(g.top+24,g.bot-24);}
+    m.emit-=dt*(0.4+4.5*(S.E+S.C*0.6));
+    if(m.emit<=0&&(S.E>0.03||S.C>0.05)){
+      for(let i2=0;i2<2;i2++)spawnCyt(m.x+rand(-6,6),m.y+rand(-6,6),false);
+      m.emit=rand(0.4,1);
+    }
+  }
+
+  const cytT=Math.round(S.C*210*(reduced?0.6:1));
+  while(cyts.length<cytT){const g2=geom();spawnCyt(rand(0,W),rand(g2.top+8,g2.bot-8),false);}
+  for(let i=cyts.length-1;i>=0;i--){const p=cyts[i];p.age+=dt;p.x+=(p.vx+base*0.5)*dt;p.y+=p.vy*dt;p.vy*=1-dt*0.5;
+    if(p.age>p.life||p.x>W+8){if(cyts.length>cytT)cyts.splice(i,1);else{p.age=0;p.x=rand(-10,W*0.3);const g2=geom();p.y=rand(g2.top+8,g2.bot-8);}}}
+  const ilT=Math.round(S.A*70*(reduced?0.6:1));
+  while(il10s.length<ilT){const g2=geom();spawnIl10(rand(0,W),rand(g2.top+8,g2.bot-8));}
+  for(let i=il10s.length-1;i>=0;i--){const p=il10s[i];p.age+=dt;p.x+=(p.vx+base*0.5)*dt;p.y+=p.vy*dt;
+    if(p.age>p.life||p.x>W+8){if(il10s.length>ilT)il10s.splice(i,1);else{p.age=0;p.x=rand(-10,W*0.4);const g2=geom();p.y=rand(g2.top+8,g2.bot-8);}}}
+  const enT=Math.round(S.E*60);
+  while(endos.length<enT){const g2=geom();spawnEndo(rand(0,W),rand(g2.top+8,g2.bot-8));}
+  for(let i=endos.length-1;i>=0;i--){const p=endos[i];p.age+=dt;p.x+=(p.vx+base*0.6)*dt;p.y+=p.vy*dt;
+    if(p.age>p.life||p.x>W+8){if(endos.length>enT)endos.splice(i,1);else{p.age=0;p.x=rand(-10,W*0.5);const g2=geom();p.y=rand(g2.top+8,g2.bot-8);}}}
+  const abxT=S.treated?Math.round(80*Math.exp(-S.tSince/8)):0;
+  while(abxP.length<abxT){const g2=geom();abxP.push({k:'abx',x:rand(-20,0),y:rand(g2.top+8,g2.bot-8),v:rand(120,170)});}
+  if(abxP.length>abxT)abxP.length=abxT;
+  for(const p of abxP){p.x+=p.v*dt;if(p.x>W+10){p.x=-10;const g2=geom();p.y=rand(g2.top+8,g2.bot-8);}}
+
+  const leakRate=Math.max(0,S.C-0.3)*70;
+  for(let i=0;i<leakRate*dt;i++)if(Math.random()<0.9)spawnLeakP();
+  for(let i=leaks.length-1;i>=0;i--){const p=leaks[i];p.age+=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;if(p.age>p.life)leaks.splice(i,1);}
+
+  for(const w2 of webs)w2.age+=dt;
+  for(let i=flashes.length-1;i>=0;i--){flashes[i].age+=dt;if(flashes[i].age>0.5)flashes.splice(i,1);}
+}
+
+/* ========================= draw: stage ========================= */
+function draw(){
+  const g=geom();
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#f3dfda';
+  ctx.fillRect(0,0,W,g.top);ctx.fillRect(0,g.bot,W,H-g.bot);
+  const hyp=1-S.O2;
+  if(hyp>0.05){
+    ctx.fillStyle='rgba(96,108,135,'+(hyp*0.3)+')';
+    ctx.fillRect(0,0,W,g.top);ctx.fillRect(0,g.bot,W,H-g.bot);
+  }
+  const grad=ctx.createLinearGradient(0,g.top,0,g.bot);
+  grad.addColorStop(0,'#fbe0d8');grad.addColorStop(0.5,'#fdece6');grad.addColorStop(1,'#fbe0d8');
+  ctx.fillStyle=grad;ctx.fillRect(0,g.top,W,g.bot-g.top);
+
+  for(const p of leaks){
+    ctx.globalAlpha=clamp(1-p.age/p.life,0,1)*0.85;
+    ctx.fillStyle='#d9a84e';
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,TAU);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  const tileW=52,gap=clamp(S.C*1.3,0,1)*15;
+  for(let x=-tileW;x<W+tileW;x+=tileW){
+    const j=Math.sin(x*12.9898)*43758.5453,jr=j-Math.floor(j);
+    const tw=tileW-5-gap*(0.5+jr),tilt=clamp(S.C*1.3,0,1)*(jr-0.5)*0.55;
+    for(const [wy,sgn] of [[g.top,-1],[g.bot,1]]){
+      if(sgn===1&&Math.abs(x+tileW/2-W*WOUND_FX)<tileW*1.1)continue;
+      ctx.save();
+      ctx.translate(x+tileW/2,wy+sgn*4);ctx.rotate(tilt*sgn);
+      ctx.fillStyle='#e0968a';
+      ctx.beginPath();
+      if(ctx.roundRect)ctx.roundRect(-tw/2,-5.5,tw,11,5.5);else ctx.rect(-tw/2,-5.5,tw,11);
+      ctx.fill();
+      ctx.fillStyle='#b85f55';
+      ctx.beginPath();ctx.ellipse(0,0,6,3.2,0,0,TAU);ctx.fill();
+      ctx.restore();
+    }
+    if(gap>3){
+      ctx.fillStyle='rgba(217,130,0,'+(gap/15*0.35)+')';
+      ctx.fillRect(x+tileW-3,g.top-4,3,8);ctx.fillRect(x+tileW-3,g.bot-4,3,8);
+    }
+  }
+  const wx=W*WOUND_FX;
+  ctx.fillStyle='#8e3b38';
+  ctx.beginPath();ctx.ellipse(wx,g.bot+3,40,13,0,0,TAU);ctx.fill();
+  ctx.strokeStyle='#c86b5e';ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.ellipse(wx,g.bot+3,40,13,0,0,TAU);ctx.stroke();
+  const colony=clamp(S.B*3,0,1)*(1-(S.treated?clamp(S.tSince/5,0,1):0));
+  const cn=Math.round(colony*12);
+  for(let i=0;i<cn;i++){
+    const a=i*2.4,rr=8+(i%4)*7;
+    ctx.save();
+    ctx.translate(wx+Math.cos(a)*rr*1.6,g.bot+16+Math.sin(a)*rr*0.5);
+    ctx.rotate(a+animT*0.5);
+    ctx.fillStyle='rgba(124,79,184,.85)';
+    ctx.beginPath();
+    if(ctx.roundRect)ctx.roundRect(-5,-2.3,10,4.6,2.3);else ctx.rect(-5,-2.3,10,4.6);
+    ctx.fill();ctx.restore();
+  }
+
+  for(const w2 of webs){
+    const a=clamp(w2.age*2,0,1);
+    ctx.strokeStyle='rgba(90,120,145,'+(0.6*a)+')';
+    ctx.lineWidth=1.4;
+    for(const s2 of w2.segs){ctx.beginPath();ctx.moveTo(s2.x1,s2.y1);ctx.lineTo(s2.x2,s2.y2);ctx.stroke();}
+    if(w2.fib>0){
+      ctx.strokeStyle='rgba(142,47,53,'+(0.85*w2.fib)+')';
+      ctx.lineWidth=1.8;
+      for(let i=0;i<w2.segs.length;i+=2){const s2=w2.segs[i];ctx.beginPath();ctx.moveTo(s2.x1,s2.y1);ctx.lineTo(s2.x2,s2.y2);ctx.stroke();}
+    }
+  }
+  for(const c of clots){
+    const R=c.R*(1+c.grow*0.4);
+    ctx.fillStyle='#7e2a30';
+    for(const b of c.blobs){ctx.beginPath();ctx.arc(c.x+b.dx*(1+c.grow*0.3),c.y+b.dy*(1+c.grow*0.3),b.r,0,TAU);ctx.fill();}
+    ctx.strokeStyle='rgba(142,47,53,.75)';ctx.lineWidth=1.4;
+    for(let i=0;i<6;i++){
+      const a1=i*1.15+c.x*0.01;
+      ctx.beginPath();
+      ctx.moveTo(c.x+Math.cos(a1)*R,c.y+Math.sin(a1)*R*0.75);
+      ctx.lineTo(c.x+Math.cos(a1+2.3)*R,c.y+Math.sin(a1+2.3)*R*0.75);
+      ctx.stroke();
+    }
+  }
+
+  for(const p of rbcs){
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+    const o2=S.O2;
+    ctx.fillStyle='rgb('+Math.round(lerp(150,212,o2))+','+Math.round(lerp(74,87,o2))+','+Math.round(lerp(94,74,o2))+')';
+    ctx.beginPath();ctx.ellipse(0,0,p.r,p.r*0.72,0,0,TAU);ctx.fill();
+    ctx.fillStyle='rgba(130,42,38,.45)';
+    ctx.beginPath();ctx.ellipse(0,0,p.r*0.45,p.r*0.3,0,0,TAU);ctx.fill();
+    ctx.restore();
+  }
+  for(const p of plats){
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+    ctx.fillStyle=p.act?'#d9a012':'#c9995c';
+    if(p.act){
+      ctx.beginPath();
+      for(let i=0;i<6;i++){const a=i/6*TAU;ctx.lineTo(Math.cos(a)*p.r*1.8,Math.sin(a)*p.r*1.8);ctx.lineTo(Math.cos(a+0.5)*p.r*0.8,Math.sin(a+0.5)*p.r*0.8);}
+      ctx.closePath();ctx.fill();
+    }else{ctx.beginPath();ctx.ellipse(0,0,p.r*1.3,p.r*0.7,0,0,TAU);ctx.fill();}
+    ctx.restore();
+  }
+  for(const b of bacts){
+    ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.a);ctx.globalAlpha=b.al;
+    ctx.fillStyle='#7c4fb8';
+    ctx.beginPath();
+    if(ctx.roundRect)ctx.roundRect(-7,-3.2,14,6.4,3.2);else ctx.rect(-7,-3.2,14,6.4);
+    ctx.fill();
+    ctx.strokeStyle='rgba(90,50,150,.55)';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(7,0);ctx.quadraticCurveTo(11,Math.sin(animT*9+b.a)*4,15,Math.sin(animT*9+b.a+1)*5);ctx.stroke();
+    ctx.fillStyle='rgba(230,215,250,.75)';
+    ctx.beginPath();ctx.ellipse(-2,-1,3.3,1.4,0,0,TAU);ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha=1;
+  for(const n of neuts){
+    if(n.state==='net'){
+      const p2=n.netT/0.6;
+      ctx.globalAlpha=1-p2;
+      ctx.fillStyle='#f7f0dc';
+      ctx.strokeStyle='#b8a476';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(n.x,n.y,n.r*(1+p2*0.9),0,TAU);ctx.fill();ctx.stroke();
+      ctx.globalAlpha=1;continue;
+    }
+    const squish=n.state==='roll'?0.72:1;
+    const wr=n.r+Math.sin(n.wob*2.2)*1.1;
+    ctx.fillStyle='#f7f0dc';
+    ctx.strokeStyle='#b8a476';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.ellipse(n.x,n.y,wr,wr*squish,0,0,TAU);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#7a6694';
+    for(let i=0;i<3;i++){
+      const a=i*2.1+n.wob*0.4;
+      ctx.beginPath();ctx.arc(n.x+Math.cos(a)*4.5,n.y+Math.sin(a)*4*squish,n.r*0.3,0,TAU);ctx.fill();
+    }
+  }
+  for(const m of macs){
+    ctx.fillStyle='#e3d2ac';
+    ctx.strokeStyle='#b89f6e';ctx.lineWidth=1.5;
+    ctx.beginPath();
+    for(let i=0;i<=10;i++){
+      const a=i/10*TAU,rr=m.r*(1+0.1*Math.sin(a*3+m.wob*1.6));
+      i?ctx.lineTo(m.x+Math.cos(a)*rr,m.y+Math.sin(a)*rr):ctx.moveTo(m.x+Math.cos(a)*rr,m.y+Math.sin(a)*rr);
+    }
+    ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.fillStyle='#8a7390';
+    ctx.beginPath();ctx.ellipse(m.x-3,m.y+1,m.r*0.42,m.r*0.3,0.4,0,TAU);ctx.fill();
+  }
+  for(const f of flashes){
+    const p2=f.age/0.5;
+    ctx.strokeStyle='rgba(217,130,0,'+(1-p2)*0.9+')';ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.arc(f.x,f.y,9+p2*22,0,TAU);ctx.stroke();
+  }
+  for(const p of endos){
+    const a=clamp(1-p.age/p.life,0,1)*0.95;
+    ctx.fillStyle='rgba(140,95,205,'+a+')';
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.age*4);
+    ctx.fillRect(-p.r,-p.r*0.5,p.r*2,p.r);
+    ctx.restore();
+  }
+  for(const p of cyts){
+    const a=clamp(1-p.age/p.life,0,1)*0.9;
+    ctx.fillStyle='rgba(226,140,20,'+a+')';
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,TAU);ctx.fill();
+  }
+  for(const p of il10s){
+    const a=clamp(1-p.age/p.life,0,1)*0.9;
+    ctx.fillStyle='rgba(42,140,175,'+a+')';
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,TAU);ctx.fill();
+  }
+  for(const p of abxP){
+    ctx.fillStyle='rgba(16,150,120,.95)';
+    ctx.beginPath();ctx.arc(p.x,p.y,2.4,0,TAU);ctx.fill();
+  }
+  if(S.C>0.06){
+    const flick=reduced?1:1+Math.sin(animT*2.2)*0.07;
+    ctx.fillStyle='rgba(235,150,40,'+(clamp(S.C,0,1)*0.17*flick)+')';
+    ctx.fillRect(0,g.top,W,g.bot-g.top);
+  }
+  if(hovered){
+    const hx=hovered.obj.x,hy=hovered.obj.y;
+    ctx.strokeStyle='rgba(58,42,48,.75)';ctx.lineWidth=2;
+    ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.arc(hx,hy,(hovered.obj.r||hovered.obj.R||12)+8,0,TAU);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+/* ========================= story beats ========================= */
+const cen=()=>({x:W/2,y:geom().cy,r:10});
+function nearest(arr,fx){
+  let best=null,bd=1e9;const cx=W/2,cy=geom().cy;
+  for(const o of arr){
+    if(fx&&!fx(o))continue;
+    const d=(o.x-cx)**2+(o.y-cy)**2;
+    if(d<bd){bd=d;best=o;}
+  }
+  return best;
+}
+const BEATS=[
+  {h:0.5, plain:false, text:'In this example, bacteria enter through a wound and reach the bloodstream. Not all sepsis begins this way.',
+    anchor:()=>({x:W*WOUND_FX,y:geom().bot+3,r:42})},
+  {h:2, text:'A neutrophil, a type of white blood cell, moves toward the bacteria and takes them in to destroy them.',
+    anchor:()=>nearest(neuts,o=>o.state!=='net'&&o.state!=='dead')||cen()},
+  {h:4, text:'These fragments represent endotoxin, or LPS, from Gram-negative bacteria. Endotoxin can stimulate inflammation when it is released.',
+    anchor:()=>nearest(endos)||(lastKill?{...lastKill}:null)||nearest(neuts)||cen()},
+  {h:6, text:'This is a macrophage. It detects signs of infection and releases signaling molecules called cytokines.',
+    anchor:()=>nearest(macs)||cen()},
+  {h:8, text:'The orange dots represent cytokines. They help coordinate the immune response, but excessive or poorly controlled signaling can cause problems.',
+    anchor:()=>nearest(cyts)||cen()},
+  {h:10, text:'Immune cells begin attaching to the blood vessel lining. The lining becomes inflamed and its normal function is disrupted.',
+    anchor:()=>nearest(neuts,o=>o.state==='roll')||nearest(neuts)||cen()},
+  {h:12, text:'Some neutrophils release NETs, structures made of DNA and proteins that trap microbes. Too many NETs can also damage the vessel lining.',
+    anchor:()=>{if(!webs.length){const n=nearest(neuts);spawnWeb(n?n.x:W/2,n?n.y:geom().cy);}return webs[webs.length-1];}},
+  {h:15, text:'The vessel lining becomes more permeable, allowing fluid to leak into surrounding tissue. This can contribute to low blood pressure.',
+    anchor:()=>({x:W*0.6,y:geom().top,r:14})},
+  {h:18, text:'The blue dots represent IL-10, a cytokine that helps limit inflammation. In sepsis, inflammatory and anti-inflammatory responses can occur together.',
+    anchor:()=>nearest(il10s)||cen()},
+  {h:21, text:'Small blood clots are forming in the vessel. These can restrict blood flow and reduce oxygen delivery to nearby tissue.',
+    anchor:()=>{if(!clots.length)spawnClot();return clots[clots.length-1];}},
+  {h:26, text:'Poor circulation and changes in how cells function can reduce oxygen delivery and use. The kidneys, lungs and other organs may begin to struggle.',
+    anchor:()=>nearest(rbcs)||cen()},
+  {h:32, plain:true, text:'Even when an infection begins to come under control, inflammation and damage to blood vessels may take time to resolve.'},
+  {h:40, plain:true, text:'In this example, the patient develops septic shock, a severe form of sepsis with major circulation problems. This is not inevitable in every case.'},
+];
+const TBEATS=[
+  {dh:0.5, text:'The teal dots represent antibiotics used to treat the bacteria. Real sepsis care may also involve IV fluids, blood pressure support and treatment of the infection source.',
+    anchor:()=>nearest(abxP)||cen()},
+  {dh:1.5, text:'Some Gram-negative bacteria can release endotoxin as they break apart. This does not mean antibiotics normally make sepsis worse.',
+    anchor:()=>nearest(endos)||cen()},
+  {dh:4.5, plain:true, text:()=>Tt<=14
+    ?'Starting appropriate treatment early helps limit further damage. The chances of recovery still depend on the individual case.'
+    :'Treatment remains essential even after serious complications begin. Recovery may require intensive care and can take time.'},
+];
+for(const b of BEATS)b.done=false;
+for(const b of TBEATS)b.done=false;
+
+let bubble=null;
+const bubbleEl=document.getElementById('bubble');
+const bubbleText=document.getElementById('bubbleText');
+const bubbleTail=document.getElementById('bubbleTail');
+function fireBeat(b){
+  const txt=typeof b.text==='function'?b.text():b.text;
+  bubbleText.textContent=txt;
+  bubble={beat:b,target:b.plain?null:(b.anchor?b.anchor():null),age:0};
+  bubbleEl.classList.add('show');
+  positionBubble();
+}
+function hideBubble(){
+  bubble=null;
+  bubbleEl.classList.remove('show');
+}
+function positionBubble(){
+  if(!bubble)return;
+  const cw=bubbleEl.offsetWidth,ch=bubbleEl.offsetHeight;
+  if(bubble.beat.plain||!bubble.target){
+    bubbleEl.classList.remove('above','below');
+    bubbleEl.style.left=Math.round((W-cw)/2)+'px';
+    bubbleEl.style.top='74px';
+    return;
+  }
+  const t=bubble.target;
+  const tx=clamp(t.x,12,W-12),ty=clamp(t.y,12,H-12);
+  const r=(t.r||t.R||10);
+  let above=true;
+  let top=ty-r-14-ch;
+  if(top<64){above=false;top=ty+r+14;}
+  top=clamp(top,64,H-ch-10);
+  const left=clamp(tx-cw/2,10,W-cw-10);
+  bubbleEl.classList.toggle('above',above);
+  bubbleEl.classList.toggle('below',!above);
+  bubbleEl.style.left=Math.round(left)+'px';
+  bubbleEl.style.top=Math.round(top)+'px';
+  const tailX=clamp(tx-left,16,cw-16);
+  bubbleTail.style.left=Math.round(tailX-6.5)+'px';
+}
+function syncBeats(){
+  const treatedNow=Tt!=null&&simT>=Tt;
+  for(const b of BEATS)b.done=b.h<simT-0.6;
+  for(const b of TBEATS)b.done=treatedNow?(Tt+b.dh)<simT-0.6:false;
+}
+function checkBeats(){
+  if(fatal)return;
+  if(!S.treated){
+    for(const b of BEATS){
+      if(!b.done&&simT>=b.h){b.done=true;fireBeat(b);break;}
+    }
+  }else{
+    for(const b of TBEATS){
+      if(!b.done&&S.tSince>=b.dh){b.done=true;fireBeat(b);break;}
+    }
+  }
+}
+
+/* ========================= hud ========================= */
+const $=id=>document.getElementById(id);
+let hudTick=0;
+function updateHUD(dt){
+  hudTick-=dt;if(hudTick>0)return;hudTick=0.4;
+  $('hourLbl').textContent='HOUR '+simT.toFixed(1)+'/48';
+  if(!scrubbing)$('scrub').value=simT;
+  const eb=$('phaseEyebrow');
+  const hrTxt='HOUR '+Math.floor(simT);
+  if(fatal){eb.textContent='HOUR 48 · END OF EXAMPLE';eb.style.background='#7a6a6e';}
+  else if(S.treated){eb.textContent=hrTxt+' · TREATMENT STARTED';eb.style.background='#148a5c';}
+  else{const p=phaseFor(simT);eb.textContent=hrTxt+' · '+p.name;eb.style.background=p.c;}
+  for(const el of phaseEls){el.classList.toggle('on',!S.treated&&simT>=el._p.t0&&simT<el._p.t1);}
+  const tm=$('treatMark');
+  if(Tt!=null){tm.style.display='block';tm.style.left='calc('+(Tt/48*100)+'% - 1px)';}
+  else tm.style.display='none';
+  const b=$('banner');
+  if(fatal){b.style.display='block';b.className='bad';b.textContent='SIMULATED OUTCOME: Death in this example. Real sepsis has no fixed 48-hour deadline.';}
+  else if(!S.treated){b.style.display='none';}
+  else{
+    b.style.display='block';
+    const h=Tt, pre='Treatment started at hour '+h.toFixed(1)+' ';
+    if(h<=8){b.className='good';b.textContent=pre+'— Early treatment in this example. Improvement is shown, not guaranteed.';}
+    else if(h<=16){b.className='good';b.textContent=pre+'— Treatment started after inflammation increased. Recovery is still possible.';}
+    else if(h<=26){b.className='warn';b.textContent=pre+'— Serious complications. Intensive care may be needed.';}
+    else{b.className='bad';b.textContent=pre+'— Advanced illness. The outcome is uncertain and treatment is still necessary.';}
+  }
+}
+
+/* ========================= tooltips / hover ========================= */
+const TIPS={
+  rbc:['Red blood cell','Carries oxygen around the body. When blood flow is disrupted, organs may receive less oxygen. The darker color in this simulation is a visual cue for reduced oxygen delivery, not a literal appearance.'],
+  plat:['Platelet','Helps blood clot to stop bleeding. In sepsis, abnormal clotting can also occur in small vessels.'],
+  bact:['Gram-negative bacterium','The bacteria in this example have endotoxin in their outer membrane. Sepsis can also be caused by other types of infection.'],
+  neut:['Neutrophil','A white blood cell that attacks microbes. It can also release NETs, which may contribute to tissue injury when excessive.'],
+  mac:['Macrophage','An immune cell that detects microbes and helps coordinate inflammation by releasing cytokines.'],
+  cyt:['Cytokines (TNF-alpha and IL-6)','Proteins that help immune cells communicate. Poorly regulated cytokine activity can contribute to inflammation and blood vessel changes.'],
+  il10:['IL-10','An anti-inflammatory cytokine that helps regulate immune responses. Its effects in sepsis depend on timing and context.'],
+  endo:['Endotoxin (LPS)','A component of the outer membrane of Gram-negative bacteria. It can trigger inflammation when the immune system detects it.'],
+  net:['NET (neutrophil extracellular trap)','A structure made of DNA and proteins released by neutrophils. It traps microbes, but excessive NETs can injure vessels and contribute to clotting.'],
+  clot:['Small blood clot','Platelets and clotting proteins collected inside a vessel. A clot can restrict blood flow to nearby tissue.'],
+  leak:['Fluid leak','Fluid passes out of the bloodstream because the vessel lining has become more permeable.'],
+  abx:['Antibiotic','A medicine that treats bacterial infection. Patients with sepsis often need additional treatment and medical support.'],
+  wall:['Endothelium','The layer of cells lining a blood vessel. In sepsis, it can become more permeable and contribute to abnormal clotting.'],
+  wound:['Entry point','The wound is the infection source in this example. Sepsis can also begin with infections in the lungs, urinary tract or abdomen.'],
+};
+const tip=$('tip');
+let hovered=null;
+const mouse={x:-1,y:-1};
+stage.addEventListener('pointermove',e=>{
+  const r=stage.getBoundingClientRect();
+  mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;
+});
+stage.addEventListener('pointerleave',()=>{mouse.x=-999;hovered=null;tip.style.display='none';});
+function hitTest(){
+  if(mouse.x<0){hovered=null;return;}
+  const g=geom();
+  const pools=[
+    [bacts,9],[neuts,17],[macs,22],[webs,32],[clots,26],[plats,7],
+    [endos,7],[cyts,6],[il10s,6],[abxP,6],[leaks,6],[rbcs,9]
+  ];
+  hovered=null;
+  for(const [pool,rad] of pools){
+    for(const o of pool){
+      const rr=Math.max(o.r||o.R||6,rad);
+      if((o.x-mouse.x)**2+(o.y-mouse.y)**2<rr*rr){hovered={k:o.k,obj:o};break;}
+    }
+    if(hovered)break;
+  }
+  if(!hovered){
+    const wx=W*WOUND_FX;
+    if((mouse.x-wx)**2+(mouse.y-(g.bot+6))**2<48*48)hovered={k:'wound',obj:{x:wx,y:g.bot+6,R:40}};
+    else if(Math.abs(mouse.y-g.top)<12||Math.abs(mouse.y-g.bot)<12)hovered={k:'wall',obj:{x:mouse.x,y:Math.abs(mouse.y-g.top)<12?g.top:g.bot,r:10}};
+  }
+  if(hovered&&TIPS[hovered.k]){
+    const [name,desc]=TIPS[hovered.k];
+    tip.innerHTML='<b>'+name+'</b><span>'+desc+'</span>';
+    tip.style.display='block';
+    tip.style.left=clamp(mouse.x+16,8,W-286)+'px';
+    tip.style.top=clamp(mouse.y-14,8,H-120)+'px';
+  }else tip.style.display='none';
+}
+
+/* ========================= controls ========================= */
+let scrubbing=false;
+const phaseEls=[];
+(function buildPhases(){
+  const host=$('phases');
+  for(const p of PHASES){
+    const b=document.createElement('button');
+    b.className='ph';b.textContent=p.name;b._p=p;
+    b.style.width=((p.t1-p.t0)/48*100)+'%';
+    b.style.background=p.c;
+    b.title=p.name+' · hours '+p.t0+'-'+p.t1+' in this example. Click to jump.';
+    b.addEventListener('click',()=>jumpTo(p.t0+0.1));
+    host.appendChild(b);
+    phaseEls.push(b);
+  }
+})();
+function checkPhaseLabels(){
+  for(const el of phaseEls)el.style.color=el.scrollWidth>el.clientWidth+2?'transparent':'';
+}
+checkPhaseLabels();
+setTimeout(checkPhaseLabels,1600);
+addEventListener('resize',checkPhaseLabels);
+function jumpTo(v){
+  const prev=simT;
+  simT=clamp(v,0,48);
+  if(Tt!=null&&simT<Tt){Tt=null;$('btnTreat').disabled=false;$('btnTreat').textContent='+ START TREATMENT';}
+  if(fatal&&simT<47.5){fatal=false;$('btnPlay').innerHTML=playing?'&#10074;&#10074; Pause':'&#9654; Play';}
+  if(Math.abs(simT-prev)>2.5){S=computeState(simT,Tt);rebuildTo(S);hideBubble();}
+  syncBeats();
+  hudTick=0;
+}
+$('btnPlay').addEventListener('click',()=>{
+  if(fatal)return;
+  playing=!playing;
+  $('btnPlay').innerHTML=playing?'&#10074;&#10074; Pause':'&#9654; Play';
+});
+$('btnSpeed').addEventListener('click',()=>{speedIdx=(speedIdx+1)%SPEEDS.length;$('btnSpeed').innerHTML=SPEEDS[speedIdx][1];});
+$('btnTreat').addEventListener('click',()=>{
+  if(Tt!=null||fatal||simT<0.3)return;
+  Tt=simT;
+  $('btnTreat').disabled=true;
+  $('btnTreat').textContent='TREATMENT STARTED AT HOUR '+Tt.toFixed(1);
+  syncBeats();
+  if(!playing){playing=true;$('btnPlay').innerHTML='&#10074;&#10074; Pause';}
+});
+$('btnReset').addEventListener('click',()=>{
+  simT=0;Tt=null;fatal=false;playing=true;
+  $('btnTreat').disabled=false;$('btnTreat').textContent='+ START TREATMENT';
+  $('btnPlay').innerHTML='&#10074;&#10074; Pause';
+  seed();hideBubble();syncBeats();hudTick=0;
+});
+$('btnStart').addEventListener('click',()=>{
+  $('intro').style.display='none';
+  playing=true;
+  $('btnPlay').innerHTML='&#10074;&#10074; Pause';
+});
+const scrubEl=$('scrub');
+scrubEl.addEventListener('input',()=>{scrubbing=true;jumpTo(parseFloat(scrubEl.value));});
+scrubEl.addEventListener('change',()=>{scrubbing=false;});
+addEventListener('keydown',e=>{
+  if(e.key===' '){e.preventDefault();$('btnPlay').click();}
+  if(e.key==='t'||e.key==='T')$('btnTreat').click();
+});
+
+/* ========================= main loop ========================= */
+seed();
+inited=true;
+function frame(now){
+  const rawDt=Math.min(0.05,(now-last)/1000);last=now;
+  const dt=(playing&&!fatal)?rawDt:0;   // pause = full freeze
+  animT+=dt;
+  if(dt>0){
+    simT=Math.min(48,simT+dt*HPS*SPEEDS[speedIdx][0]);
+    if(simT>=47.5&&Tt==null){fatal=true;playing=false;$('btnPlay').innerHTML='&#9654; Play';hideBubble();}
+  }
+  S=computeState(simT,Tt);
+  if(dt>0){
+    update(dt);
+    checkBeats();
+    if(bubble){
+      bubble.age+=dt;
+      if(bubble.age>7)hideBubble();
+    }
+  }
+  hitTest();
+  draw();
+  positionBubble();
+  updateHUD(rawDt);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
